@@ -28,9 +28,9 @@
 
 ##### 二、杂质半导体
 
-​	1、N型半导体---加磷（P）![1](C:\Users\Leon\AppData\Roaming\Typora\typora-user-images\image-20210816203938347.png)
+​	1、N型半导体---加磷（P）![1](D:\engineer\MCU\MCU\.pic\1.png)
 
-​	2、P型半导体---加硼（B)![image-20210816204142398](C:\Users\Leon\AppData\Roaming\Typora\typora-user-images\image-20210816204142398.png)
+​	2、P型半导体---加硼（B)![image-20210816204142398](D:\engineer\MCU\MCU\.pic\2.png)
 
 ##### 三、PN结的形成及其单向导电性
 
