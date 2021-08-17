@@ -30,19 +30,19 @@
 
 ​	1、N型半导体---加磷（P）![1](https://github.com/Leon199601/MCU/blob/main/pic/1.png)
 
-​	2、P型半导体---加硼（B)![image-20210816204142398](D:\engineer\MCU\MCU\.pic\2.png)
+​	2、P型半导体---加硼（B)![2](https://github.com/Leon199601/MCU/blob/main/pic/2.png)
 
 ##### 三、PN结的形成及其单向导电性
 
 ​	1、扩散运动因为浓度差
 
-​	扩散运动使靠近接触面P区的空穴浓度降低、靠近接触面N区的自由电子浓度降低，产生内电场，不利于扩散运动的继续进行。![image-20210816205109430](C:\Users\Leon\AppData\Roaming\Typora\typora-user-images\image-20210816205109430.png)
+​	扩散运动使靠近接触面P区的空穴浓度降低、靠近接触面N区的自由电子浓度降低，产生内电场，不利于扩散运动的继续进行。![3](https://github.com/Leon199601/MCU/blob/main/pic/3.png)
 
 ​	2、漂移运动因为电场
 
 ​	  由于扩散运动使P区与N区的交界面缺少多数载流子，形成内电场，从而阻止扩散运动的进行。内电场使空穴从N区向P区、自由电子从P区向N区运动。
 
-![image-20210816205312765](C:\Users\Leon\AppData\Roaming\Typora\typora-user-images\image-20210816205312765.png)
+![4](https://github.com/Leon199601/MCU/blob/main/pic/4.png)
 
 ##### 	参与扩散运动和漂移运动的载流子数目相同，达到动态平衡，就形成了PN结。
 
@@ -52,11 +52,13 @@
 
  	耗尽层变窄，扩散运动加剧，由于外电源的作用，形成扩散电流，PN结处于导通状态。
 
-​	![image-20210816210402825](C:\Users\Leon\AppData\Roaming\Typora\typora-user-images\image-20210816210402825.png)
+​	![5](https://github.com/Leon199601/MCU/blob/main/pic/5.png)
 
 ​	PN结加反向电压截止：
 
-​	耗尽层变宽，阻止扩散运动，有利于漂移运动，形成漂移电流。由于电流很小，故可近似认为其截止。![image-20210816210549419](C:\Users\Leon\AppData\Roaming\Typora\typora-user-images\image-20210816210549419.png)
+​	耗尽层变宽，阻止扩散运动，有利于漂移运动，形成漂移电流。由于电流很小，故可近似认为其截止。
+
+![6](https://github.com/Leon199601/MCU/blob/main/pic/6.png)
 
 ##### 四、PN结的电容效应
 
@@ -78,17 +80,19 @@
 
 ### 二、二极管的伏安特性及电流方程
 
-![image-20210816212729563](C:\Users\Leon\AppData\Roaming\Typora\typora-user-images\image-20210816212938113.png)
+![7](https://github.com/Leon199601/MCU/blob/main/pic/7.png)
 
-![image-20210816213001291](C:\Users\Leon\AppData\Roaming\Typora\typora-user-images\image-20210816213001291.png)
+![8](https://github.com/Leon199601/MCU/blob/main/pic/8.png)
 
-![image-20210816213059772](C:\Users\Leon\AppData\Roaming\Typora\typora-user-images\image-20210816213059772.png)
+![9](https://github.com/Leon199601/MCU/blob/main/pic/9.png)
 
-![image-20210816212524232](C:\Users\Leon\AppData\Roaming\Typora\typora-user-images\image-20210816212524232.png)
+![10](https://github.com/Leon199601/MCU/blob/main/pic/10.png)
 
 ​										击穿电压					反向饱和电流  		开启电压
 
-​	结论：T（℃）↑→正向特性左移，反向特性下移![image-20210816214150155](C:\Users\Leon\AppData\Roaming\Typora\typora-user-images\image-20210816214150155.png)
+​	结论：T（℃）↑→正向特性左移，反向特性下移
+
+![11](https://github.com/Leon199601/MCU/blob/main/pic/11.png)
 
 ### 三、二极管的等效电路
 
@@ -98,11 +102,11 @@
 
 ​	当二极管在静态基础上有一动态信号作用时，则可将二极管等效为一个电阻，称为动态电阻，也就是微变等效电路。
 
-![image-20210816215343117](C:\Users\Leon\AppData\Roaming\Typora\typora-user-images\image-20210816215343117.png)
+![12](https://github.com/Leon199601/MCU/blob/main/pic/12.png)
 
-![image-20210816215446426](C:\Users\Leon\AppData\Roaming\Typora\typora-user-images\image-20210816215446426.png)
+![13](https://github.com/Leon199601/MCU/blob/main/pic/13.png)
 
-![image-20210816215503634](C:\Users\Leon\AppData\Roaming\Typora\typora-user-images\image-20210816215503634.png)
+![14](https://github.com/Leon199601/MCU/blob/main/pic/14.png)
 
 ### 四、二极管的主要参数
 
@@ -116,7 +120,7 @@
 
 ### 五、稳压二极管
 
-![image-20210816220543442](C:\Users\Leon\AppData\Roaming\Typora\typora-user-images\image-20210816220543442.png)
+![15](https://github.com/Leon199601/MCU/blob/main/pic/15.png)
 
 ​	主要参数
 
