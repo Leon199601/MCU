@@ -311,17 +311,17 @@ temp = GPIOB->IDR;
 #### GPIO工作模式
 
 ```c
-GPIOG 8种工作模式
+//GPIOG 8种工作模式
 typedef enum
 {
-	GPIO_Mode_AIN = 0x0，			//模拟输入
-	GPIO_Mode_IN_FLOATING = 0x04，	//浮空输入
-	GPIO_Mode_IPD = 0x28，			//下拉输入
-	GPIO_Mode_IPU = 0x48，			//上拉输入
-	GPIO_Mode_Out_OD = 0x14，		//开漏输出
-	GPIO_Mode_Out_PP = 0x10，		//推挽输出
-	GPIO_Mode_AF_OD = 0x1C，			//复用开漏输出
-	GPIO_Mode_AF_PP = 0x18			 //复用推挽输出
+	GPIO_Mode_AIN = 0x0,			//模拟输入
+	GPIO_Mode_IN_FLOATING = 0x04,	//浮空输入
+	GPIO_Mode_IPD = 0x28,			//下拉输入
+	GPIO_Mode_IPU = 0x48,			//上拉输入
+	GPIO_Mode_Out_OD = 0x14,		//开漏输出
+	GPIO_Mode_Out_PP = 0x10,		//推挽输出
+	GPIO_Mode_AF_OD = 0x1C,			//复用开漏输出
+	GPIO_Mode_AF_PP = 0x18		    //复用推挽输出
 } GPIOMode_TypeDef;
 ```
 
@@ -423,8 +423,8 @@ __main 其实不是我们定义的(不要与C 语言中的main 函数混淆)，�
 第十行表示子程序的结束。
 总之，看完这段代码后，了解到如下内容即可：
 
-1、我们需要在外部定义一个SystemInit函数设置STM32 的时钟；
+1.我们需要在外部定义一个SystemInit函数设置STM32 的时钟；
 
-2、STM32 上电后，会执行SystemInit 函数，最后执行我们C 语言中的main 函数。
+2.STM32 上电后，会执行SystemInit 函数，最后执行我们C 语言中的main 函数。
 
 #### 3、stm32f10x.h文件
