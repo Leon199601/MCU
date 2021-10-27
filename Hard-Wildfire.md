@@ -321,7 +321,7 @@ typedef enum
 	GPIO_Mode_Out_OD = 0x14,		//开漏输出
 	GPIO_Mode_Out_PP = 0x10,		//推挽输出
 	GPIO_Mode_AF_OD = 0x1C,			//复用开漏输出
-	GPIO_Mode_AF_PP = 0x18		    //复用推挽输出
+	GPIO_Mode_AF_PP = 0x18			//复用推挽输出
 } GPIOMode_TypeDef;
 ```
 
@@ -428,3 +428,168 @@ __main 其实不是我们定义的(不要与C 语言中的main 函数混淆)，�
 2.STM32 上电后，会执行SystemInit 函数，最后执行我们C 语言中的main 函数。
 
 #### 3、stm32f10x.h文件
+
+连接LED灯的GPIO引脚，通过读写寄存器来控制，寄存器映射就是给一个已经分配好地址的特殊的内存空间取的一个别名，这个特殊的内存空间就是寄存器，它可以通过指针来操作。在编程之前我们要先实现寄存器映射，寄存器映射的代码都统一写在stm32f10x.h 文件中
+
+```c
+/*片上外设基地址  */
+#define PERIPH_BASE           ((unsigned int)0x40000000)
+
+/*APB2 总线基地址 */
+#define APB2PERIPH_BASE       (PERIPH_BASE + 0x10000)
+/* AHB总线基地址 */
+#define AHBPERIPH_BASE        (PERIPH_BASE + 0x20000)
+
+/*GPIOC外设基地址*/
+#define GPIOC_BASE            (APB2PERIPH_BASE + 0x1000)
+
+/* GPIOC寄存器地址,强制转换成指针 */
+#define GPIOC_CRL			*(unsigned int*)(GPIOC_BASE+0x00)
+#define GPIOC_CRH			*(unsigned int*)(GPIOC_BASE+0x04)
+#define GPIOC_IDR			*(unsigned int*)(GPIOC_BASE+0x08)
+#define GPIOC_ODR			*(unsigned int*)(GPIOC_BASE+0x0C)
+#define GPIOC_BSRR	  *(unsigned int*)(GPIOC_BASE+0x10)
+#define GPIOC_BRR			*(unsigned int*)(GPIOC_BASE+0x14)
+#define GPIOC_LCKR		*(unsigned int*)(GPIOC_BASE+0x18)
+
+/*RCC外设基地址*/
+#define RCC_BASE      (AHBPERIPH_BASE + 0x1000)
+/*RCC的AHB1时钟使能寄存器地址,强制转换成指针*/
+#define RCC_APB2ENR		 *(unsigned int*)(RCC_BASE+0x18)
+```
+
+最后两段是RCC 外设寄存器的地址定义，RCC 外设是用来设置时钟的，以后我们会详细分析，本实验中只要了解到使用GPIO 外设必须开启它的时钟即可。
+
+#### 4、main文件
+
+先编写main函数
+
+```c
+int main (void)
+{
+}
+```
+
+此时直接编译报错：
+
+“Error: L6218E: Undefined symbol SystemInit (referred from startup_stm32f10x.o)”
+
+错误提示SystemInit 没有定义。
+
+从分析启动文件时我们知道，Reset_Handler 调用了该函数用来初始化SMT32 系统时钟，为了简单起见，我们在 main 文件里面定义一个SystemInit 空函数，什么也不做，为的是骗过编译器，把这个错误去掉。关于配置系统时钟我们在后面再写。当我们不配置系统时钟时，STM32 会把HSI 当作系统时钟，HSI=8M，由芯片内部的振荡器提供。我们在main 中添加如下函数：
+
+```c
+// 函数为空，目的是为了骗过编译器不报错
+void SystemInit(void)
+{	
+}
+```
+
+或者还有一种方法（不建议使用此方法）：在启动文件中把有关SystemInit 的代码注释掉
+
+```assembly
+; Reset handler
+Reset_Handler   PROC
+                EXPORT  Reset_Handler             [WEAK]
+                IMPORT  __main
+                
+                ;IMPORT  SystemInit
+                ;LDR     R0, =SystemInit
+                ;BLX     R0
+                
+                LDR     R0, =__main
+                BX      R0
+                ENDP
+```
+
+开启点灯之旅，在main函数中添加代码
+
+##### 1.GPIO模式
+
+设置GPIO引脚配置为输出模式，即配置GPIO的端口配置低寄存器CRL,CRL包含0-7号引脚，每个引脚占用4个寄存器。MODE 位用来配置输出的速度，CNF 位用来配置各种输入输出模式。在这里我们把GPIO 引脚配置为通用推挽输出，输出的速度为10M
+
+```c
+//清空控制PC2的端口位
+GPIOC_CRL &= ~( 0x0F<< (4*2));	
+// 配置PC2为通用推挽输出，速度为10M
+GPIOC_CRL |= (1<<4*2);
+```
+
+![8](https://github.com/Leon199601/MCU/blob/main/pic/w-8.jpg)
+
+在代码中，我们先把控制PC2 的端口位清0，然后再向它赋值“0001 b”，从而使GPIOC2 引脚设置成输出模式，速度为10M。
+代码中使用了“&=~”、“|=”这种操作方法是为了避免影响到寄存器中的其它位。因为寄存器不能按位读写，假如我们直接给CRL 寄存器赋值： GPIOC_CRL = 0x0000 0100;这时CRL 的的低8~11 位被设置成“0001”输出模式，但其它GPIO 引脚就有意见了，因为其它引脚的MODER 位都已被设置成输入模式(即全部被清0)。所以，为了在配置寄存器某个位的时候不影响其它位，推荐使用 “ &=~ ”和“ |= ”这两种操作方式，其中“ &=~ ”用于清0，“ |= ”用于置1
+
+##### 2.控制引脚输出电平
+
+输出模式，对端口位设置/清除寄存器BSRR 寄存器、端口位清除寄存器BRR 和ODR 寄存器写入参数即可控制引脚的电平状态，其中操作BSRR 和BRR 最终影响的都是ODR 寄存器，然后再通过ODR 寄存器的输出来控制GPIO。为了一步到位，我们在这里直接操作ODR 寄存器来控制GPIO 的电平
+
+```c
+// PC2 输出 低电平
+GPIOC_ODR &= ~(1<<2);
+```
+
+![9](https://github.com/Leon199601/MCU/blob/main/pic/w-9.jpg)
+
+##### 3.开启外设时钟
+
+STM32 的 外设很多，为了降低功耗，每个外设都对应着一个时钟，在芯片刚上电的时候这些时钟都是被关闭的，如果想要外设工作，必须把相应的时钟打开。
+STM32 的所有外设的时钟由一个专门的外设来管理，叫 RCC（reset and clockcontrol），RCC 在==《 STM32 中文参考手册》==的第六章。关于RCC 外设中的时钟部分，我们在后面的章节《RCC—使用HSE/HIS 配置》中有详细的讲解，这里我们暂时先了解下。所有的 GPIO 都挂载到 APB2 总线上，具体的时钟由APB2 外设时钟使能寄存器(RCC_APB2ENR)来控制
+
+```c
+// 开启GPIOC 端口时钟
+RCC_APB2ENR |= (1<<4);
+```
+
+![10](https://github.com/Leon199601/MCU/blob/main/pic/w-10.jpg)
+
+##### 4.成功点亮，水到渠成
+
+开启时钟，配置引脚模式，控制电平，控制一个LED灯。
+
+```c
+int main(void)
+{	
+	// 开启GPIOC 端口时钟
+	RCC_APB2ENR |= (1<<4);
+
+	//清空控制PC2的端口位
+	GPIOC_CRL &= ~( 0x0F<< (4*2));	
+	// 配置PC2为通用推挽输出，速度为10M
+	GPIOC_CRL |= (1<<4*2);
+
+	// PC2 输出 低电平
+	GPIOC_ODR &= ~(1<<2);
+	
+	while(1);
+}
+```
+
+## 构建库函数雏形
+
+为了更好的维护，要学习STM32的固件库，在固件库的基础上了解底层，学习寄存器。
+
+### STM32函数库
+
+固件库就是指“STM32标准函数库”，由ST公司针对STM32提供的函数接口（API），开发者调用这些函数接口来配置STM32的寄存器。开发快速、易阅读、维护成本低
+
+![11](https://github.com/Leon199601/MCU/blob/main/pic/w-11.jpg)
+
+### 用库来开发及学习
+
+采用直接配置寄存器的方式开发的程序员，会列举以下原因：
+(1) 具体参数更直观
+(2) 程序运行占用资源少
+
+相对于库开发的方式，直接配置寄存器方式生成的代码量的确会少一点，但因为STM32 有充足的资源，权衡库的优势与不足，绝大部分时候，我们愿意牺牲一点CPU 资源，选择库开发。一般只有在对代码运行时间要求极苛刻的地方，才用直接配置寄存器的方式代替，如频繁调用的中断服务函数。
+
+对于库开发与直接配置寄存器的方式，就好比编程是用汇编好还是用 C 好一样。在STM32F1 系列刚推出函数库时引起程序员的激烈争论，但是，随着ST 库的完善与大家对库的了解，更多的程序员选择了库开发。现在STM32F1 系列和STM32F4 系列各有一套自己的函数库，但是它们大部分是兼容的，F1 和F4 之间的程序移植，只需要小修改即可。而如果要移植用寄存器写的程序，那简直跟脱胎换骨差不多。
+
+用库来进行开发，市场已有定论，用户群说明了一切，但对于STM32 的学习仍然有人认为用寄存器好，而且汇编不是还没退出大学教材么？认为这种方法直观，能够了解到是配置了哪些寄存器，怎样配置寄存器。事实上，库函数的底层实现恰恰是直接配置寄存器方式的最佳例子，它代替我们完成了寄存器配置的工作，而想深入了解芯片是如何工作的话，只要直接查看库函数的最底层实现就能理解，相信你会为它严谨、优美的实现方式而陶醉，要==想修炼C 语言，就从ST 的库开始==吧。所以在以后的章节中，使用软件库是我们的重点，而且我们通过讲解库API 去效地学习STM32 的寄存器，并不至于因为用库学习，就不会用寄存器控制STM32 芯片。
+
+### 实验：构建库函数雏形
+
+在寄存器点亮LED的代码上完善，把代码一层层封装，实现库的最初的雏形，打开配套例程“9-自己写库—构建库函数雏形”来理解阅读
+
+#### 1、外设寄存器结构体定义
+
