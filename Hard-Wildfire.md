@@ -593,3 +593,524 @@ int main(void)
 
 #### 1、外设寄存器结构体定义
 
+外设寄存器地址都是基于外设基地址的偏移地址，都是在外设基地址上逐渐连续递增，每个寄存器占32个字节，和结构体里的成员类似。结构体的首地址等于外设的基地址，结构体的成员等于寄存器，成员排列顺序跟寄存器顺序一样。
+
+在工程中“stm32f10x.h”文件中，用结构体封装GPIO及RCC外设的寄存器
+
+```c
+//寄存器的值常常是芯片外设自动更改的，即使CPU没有执行程序，也有可能发生变化
+//编译器有可能会对没有执行程序的变量进行优化，所以用volatile来修饰寄存器变量
+
+//volatile表示易变的变量，防止编译器优化，
+#define		__IO	volatile	
+typedef unsigned int      uint32_t;
+typedef unsigned short    uint16_t;
+
+//GPIO 寄存器结构体定义
+typedef struct
+{
+	uint32_t CRL;	//端口配置低寄存器，		地址偏移0X00
+	uint32_t CRH;	//高寄存器				0X04
+	uint32_t IDR;	//端口数据输入寄存器		 0X08	
+	uint32_t ODR;	//输出寄存器			   0X0C
+	uint32_t BSRR;	//端口位设置/清除寄存器	0X10
+	uint32_t BRR;	//端口位清除寄存器		 0X14
+	uint32_t LCKR;	//端口配置锁定寄存器		0X18
+}GPIO_TypeDef;
+```
+
+这段代码在每个结构体成员前增加了一个“__IO”前缀，它的原型在这段代码的第一行，代表了C 语言中的关键字“==volatile==”，在C 语言中该关键字用于表示变量是易变的，要求编译器不要优化。这些结构体内的成员，都代表着寄存器，而寄存器很多时候是由外设或STM32 芯片状态修改的，也就是说即使CPU 不执行代码修改这些变量，变量的值也有可能被外设修改、更新，所以每次使用这些变量的时候，我们都要求CPU 去该变量的地址重新访问。若没有这个关键字修饰，在某些情况下，编译器认为没有代码修改该变量，就直接从CPU 的某个缓存获取该变量值，这时可以加快执行速度，但该缓存中的是陈旧数据，与我们要求的寄存器最新状态可能会有出入。
+
+#### 2、外设存储器映射
+
+外设的地址定义成一个个宏，把寄存器地址和结构体地址对应起来，实现外设存储器的映射
+
+```c
+//片上外设基地址
+#define  PERIPH_BASE               ((unsigned int)0x40000000)
+
+//APB2 总线基地址
+#define  APB2PERIPH_BASE          (PERIPH_BASE + 0x10000)
+//AHB 总线基地址
+#define  AHBPERIPH_BASE           (PERIPH_BASE + 0x20000)
+
+//GPIO外设基地址
+#define GPIOA_BASE			(APB2PERIPH_BASE + 0x0800)
+#define GPIOB_BASE			(APB2PERIPH_BASE + 0x0800)
+#define GPIOC_BASE			(APB2PERIPH_BASE + 0x0800)
+#define GPIOD_BASE			(APB2PERIPH_BASE + 0x0800)
+#define GPIOE_BASE			(APB2PERIPH_BASE + 0x0800)
+#define GPIOF_BASE			(APB2PERIPH_BASE + 0x0800)
+#define GPIOG_BASE			(APB2PERIPH_BASE + 0x0800)
+
+//RCC外设基地址
+#define  RCC_BASE                (AHBPERIPH_BASE + 0x1000)
+```
+
+#### 3、外设声明
+
+```c
+//GPIO 外设声明
+#define GPIOA   ((GPIO_TypeDef*)GPIOA_BASE)
+#define GPIOB   ((GPIO_TypeDef*)GPIOB_BASE)
+#define GPIOC   ((GPIO_TypeDef*)GPIOC_BASE)
+#define GPIOD   ((GPIO_TypeDef*)GPIOD_BASE)
+#define GPIOE   ((GPIO_TypeDef*)GPIOE_BASE)
+#define GPIOF   ((GPIO_TypeDef*)GPIOF_BASE)
+#define GPIOG   ((GPIO_TypeDef*)GPIOG_BASE)
+
+//RCC 外设声明
+#define RCC     ((RCC_TypeDef*)RCC_BASE)
+
+//RCC的AHB1时钟使能寄存器地址，强制转换成指针
+#define RCC_APB2ENR     *(unsigned int *)(RCC_BASE+0x18)
+```
+
+通过强制类型转换把外设的基地址转换成GPIO_TypeDef 类型的结构体指针，然后通过宏定义把GPIOA、GPIOB 等定义成外设的结构体指针，通过外设的结构体指针就可以达到访问外设的寄存器的目的。
+
+```c
+//使用寄存器结构体指针点亮LED
+int main (void)
+{	
+#if 0	//直接通过操作内存来控制寄存器	
+	// 打开 GPIOC 端口的时钟
+	RCC_APB2ENR  |=  ( (1) << 4 );
+	
+	// 配置IO口为输出
+	GPIOC_CRL &=  ~( (0x0f) << (4*2) );
+	GPIOC_CRL |=  ( (1) << (4*2) );
+	
+	// 控制 ODR 寄存器
+	GPIOC_ODR &= ~(1<<2);
+	//GPIOC_ODR |= (1<<2);
+
+#elif 1		//通过寄存器结构体指针来控制寄存器
+		// 打开 GPIOC 端口的时钟
+	RCC_APB2ENR  |=  ( (1) << 4 );
+	
+	// 配置IO口为输出
+	GPIOC->CRL &=  ~( (0x0f) << (4*2) );
+	GPIOC->CRL |=  ( (1) << (4*2) );
+	
+	// 控制 ODR 寄存器
+	GPIOC->ODR &= ~(1<<2);
+	//GPIOC->ODR |= (1<<2);
+#endif
+}
+```
+
+除了把“_”换成了“->”，其他都跟使用寄存器点亮LED 那部分代码一样。这是因为我们现在只是实现了库函数的基础，还没有定义库函数。打好了地基，下面我们就来建高楼。接下来使用函数来封装GPIO 的基本操作，方便以后应用的时候不需要再查询寄存器，而是直接通过调用这里定义的函数来实现。我们把针对GPIO 外设操作的函数及其宏定义分别存放在“ stm32f10x_gpio.c ” 和“stm32f10x_gpio.h”文件中，这两个文件需要自己新建。
+
+#### 4、定义位操作函数
+
+“stm32f10x_gpio.c”中控制引脚输出高低电平
+
+```c
+/*
+ *函数功能：设置引脚为高电平
+ *参数说明：GPIOx：该参数GPIO_TypeDef类型的指针，指向GPIO端口地址
+ *GPIO_Pin:选择要设置的GPIO端口引脚，可输入宏GPIO_Pin_0-15,
+ *		   表示GPIOx端口的0-15号引脚。
+ */
+void GPIO_SetBits(GPIO_TypeDef *GPIOx,uint16_t GPIO_Pin)
+{
+    /*设置GPIOx端口BSRR寄存器的第GPIO_Pin位，使其输出高电平*/
+    /*因为BSRR寄存器写0不影响，
+      宏GPIO_Pin只是对应位为1，其他位均为0，所有可以直接赋值*/
+    
+	GPIOx->BSRR |= GPIO_Pin;
+}
+
+/*
+ *函数功能：设置引脚为低电平
+ *参数说明：GPIOx：该参数GPIO_TypeDef类型的指针，指向GPIO端口地址
+ *GPIO_Pin:选择要设置的GPIO端口引脚，可输入宏GPIO_Pin_0-15,
+ *		   表示GPIOx端口的0-15号引脚。
+ */
+void GPIO_ResetBits( GPIO_TypeDef *GPIOx,uint16_t GPIO_Pin )
+{
+    /*设置GPIOx端口BRR寄存器的第GPIO_Pin位，使其输出高电平*/
+    /*因为BRR寄存器写0不影响，
+      宏GPIO_Pin只是对应位为1，其他位均为0，所有可以直接赋值*/
+    
+	GPIOx->BRR |= GPIO_Pin;
+}
+```
+
+![12](https://github.com/Leon199601/MCU/blob/main/pic/w-12.jpg)
+
+![13](https://github.com/Leon199601/MCU/blob/main/pic/w-13.jpg)
+
+控制各种端口引脚的范例代码
+
+```c
+//控制GPIO的引脚10输出高低电平
+GPIO_SetBits(GPIOB,(uint16_t)(1<<10));
+GPIO_ResetBits(GPIOB,(uint16_t)(1<<10));
+```
+
+设置引脚好时，不方便，为此把表示16个引脚的操作数都定义成宏
+
+```c
+/*GPIO引脚号定义*/
+#define GPIO_Pin_0    ((uint16_t)0x0001)  /*!< 选择Pin0 */    //(00000000 00000001)b
+#define GPIO_Pin_1    ((uint16_t)0x0002)  /*!< 选择Pin1 */    //(00000000 00000010)b
+#define GPIO_Pin_2    ((uint16_t)0x0004)  /*!< 选择Pin2 */    //(00000000 00000100)b
+#define GPIO_Pin_3    ((uint16_t)0x0008)  /*!< 选择Pin3 */    //(00000000 00001000)b
+#define GPIO_Pin_4    ((uint16_t)0x0010)  /*!< 选择Pin4 */    //(00000000 00010000)b
+#define GPIO_Pin_5    ((uint16_t)0x0020)  /*!< 选择Pin5 */    //(00000000 00100000)b
+#define GPIO_Pin_6    ((uint16_t)0x0040)  /*!< 选择Pin6 */    //(00000000 01000000)b
+#define GPIO_Pin_7    ((uint16_t)0x0080)  /*!< 选择Pin7 */    //(00000000 10000000)b
+
+#define GPIO_Pin_8    ((uint16_t)0x0100)  /*!< 选择Pin8 */    //(00000001 00000000)b
+#define GPIO_Pin_9    ((uint16_t)0x0200)  /*!< 选择Pin9 */    //(00000010 00000000)b
+#define GPIO_Pin_10   ((uint16_t)0x0400)  /*!< 选择Pin10 */   //(00000100 00000000)b
+#define GPIO_Pin_11   ((uint16_t)0x0800)  /*!< 选择Pin11 */   //(00001000 00000000)b
+#define GPIO_Pin_12   ((uint16_t)0x1000)  /*!< 选择Pin12 */   //(00010000 00000000)b
+#define GPIO_Pin_13   ((uint16_t)0x2000)  /*!< 选择Pin13 */   //(00100000 00000000)b
+#define GPIO_Pin_14   ((uint16_t)0x4000)  /*!< 选择Pin14 */   //(01000000 00000000)b
+#define GPIO_Pin_15   ((uint16_t)0x8000)  /*!< 选择Pin15 */   //(10000000 00000000)b
+#define GPIO_Pin_All  ((uint16_t)0xFFFF)  /*!< 选择全部引脚*/ //(11111111 11111111)b
+```
+
+控制设置整个端口0-15所有引脚
+
+```c
+//控制GPIO的引脚10输出高低电平
+GPIO_SetBits(GPIOB,GPIO_Pin_10);
+GPIO_ResetBits(GPIOB,GPIO_Pin_10);
+```
+
+使用以上代码控制GPIO，我们就不需要再看寄存器了，直接从函数名和输入参数就可以直观看出这个语句要实现什么操作。(英文中―Set‖表示“置位”，即高电平，“Reset”表示“复位”，即低电平)
+
+#### 5、定义初始化结构体GPIO_InitTypeDef
+
+定义位操作函数后，控制GPIO 输出电平的代码得到了简化，但在控制GPIO 输出电平前还需要初始化GPIO 引脚的各种模式，这部分代码涉及的寄存器有很多，我们希望初始化GPIO 也能以如此简单的方法去实现。为此，我们先根据GPIO 初始化时涉及到的初始化参数以结构体的形式封装起来，声明一个名为GPIO_InitTypeDef 的结构体类型
+
+```c
+typedef struct
+{
+	uint16_t GPIO_Pin;		/*选择要配置的GPIO引脚*/
+	uint16_t GPIO_Speed;	/*选择GPIO引脚的速率*/
+	uint16_t GPIO_Mode;		/*选择GPIO引脚的工作模式*/
+}GPIO_InitTypeDef;
+```
+
+该函数能根据这个变量值中的内容去配置寄存器，从而实现GPIO 的初始化。
+
+#### 6、定义引脚模式的枚举类型
+
+上面定义的结构体很直接，美中不足的是在对结构体中各个成员赋值实现某个功能时还需要查询手册的寄存器说明，我们不希望每次用到的时候都要去查询手册，我们可以使用C 语言中的枚举定义功能，根据手册把每个成员的所有取值都定义好，具体代码
+
+```c
+typedef enum
+{ 
+  GPIO_Speed_10MHz = 1,         // 10MHZ        (01)b
+  GPIO_Speed_2MHz,              // 2MHZ         (10)b
+  GPIO_Speed_50MHz              // 50MHZ        (11)b
+}GPIOSpeed_TypeDef;
+
+typedef enum
+{ GPIO_Mode_AIN = 0x0,           // 模拟输入     (0000 0000)b
+  GPIO_Mode_IN_FLOATING = 0x04,  // 浮空输入     (0000 0100)b
+  GPIO_Mode_IPD = 0x28,          // 下拉输入     (0010 1000)b
+  GPIO_Mode_IPU = 0x48,          // 上拉输入     (0100 1000)b
+  
+  GPIO_Mode_Out_OD = 0x14,       // 开漏输出     (0001 0100)b
+  GPIO_Mode_Out_PP = 0x10,       // 推挽输出     (0001 0000)b
+  GPIO_Mode_AF_OD = 0x1C,        // 复用开漏输出 (0001 1100)b
+  GPIO_Mode_AF_PP = 0x18         // 复用推挽输出 (0001 1000)b
+}GPIOMode_TypeDef;
+```
+
+关于速度的枚举类型很好理解。
+
+关于模式的枚举类型，通过表格来梳理
+
+![14](https://github.com/Leon199601/MCU/blob/main/pic/w-14.jpg)
+
+转化成二进制之后，就比较容易发现规律。bit4 用来区分端口是输入还是输出，0 表示输入，1 表示输出，bit2 和bit3 对应寄存器的CNFY[1:0]位，是我们真正要写入到CRL 和CRH 这两个端口控制寄存器中的值。bit0 和bit1 对应寄存器的MODEY[1:0]位，这里我们暂不初始化，在GPIO_Init()初始化函数中用来跟GPIOSpeed 的值相加即可实现速率的配置。有关具体的代码分析见GPIO_Init()库函数。其中在下拉输入和上拉输入中我们设置bit5 和bit6 的值为01 和10 来以示区别。
+
+有了这些枚举定义，我们的GPIO_InitTypeDef 结构体就可以使用枚举类型来限定输入参数，具体见代码
+
+```c
+typedef struct
+{
+	uint16_t GPIO_Pin;
+	GPIOSpeed_TypeDef GPIO_Speed;
+	GPIOMode_TypeDef GPIO_Mode;
+}GPIO_InitTypeDef;
+```
+
+如果不使用枚举类型，仍使用“uint16_t”类型来定义结构体成员，那么成员值的范围就是0-255，而实际上这些成员都只能输入几个数值。所以使用枚举类型可以对结构体成员起到限定输入的作用，只能输入相应已定义的枚举值。
+利用这些枚举定义，给GPIO_InitTypeDef 结构体类型赋值配置就变得非常直观，
+
+```c
+GPIO_InitTypeDef  GPIO_InitStructure;
+
+GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0;
+GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+```
+
+#### 7、定义GPIO初始化函数
+
+对初始化结构体赋值后，把它输入到GPIO 初始化函数，由它来实现寄存器配置。
+
+```c
+/*
+ *函数功能：初始化引脚模式
+ *参数说明：GPIOx，该参数为GPIO_TypeDef类型的指针，指向GPIO端口的地址
+ *		  GPIO_InitTypeDef：GPIO_InitTypeDef结构体指针，指向初始化变量
+ */
+void GPIO_Init(GPIO_TypeDef* GPIOx, GPIO_InitTypeDef* GPIO_InitStruct)
+{
+  uint32_t currentmode = 0x00, currentpin = 0x00, pinpos = 0x00, pos = 0x00;
+  uint32_t tmpreg = 0x00, pinmask = 0x00;
+  
+/*---------------------- GPIO 模式配置 --------------------------*/
+  // 把输入参数GPIO_Mode的低四位暂存在currentmode
+  currentmode = ((uint32_t)GPIO_InitStruct->GPIO_Mode) & ((uint32_t)0x0F);
+	
+  // bit4是1表示输出，bit4是0则是输入 
+  // 判断bit4是1还是0，即首选判断是输入还是输出模式
+  if ((((uint32_t)GPIO_InitStruct->GPIO_Mode) & ((uint32_t)0x10)) != 0x00)
+  { 
+	// 输出模式则要设置输出速度
+    currentmode |= (uint32_t)GPIO_InitStruct->GPIO_Speed;
+  }
+/*-------------GPIO CRL 寄存器配置 CRL寄存器控制着低8位IO- -------*/
+  // 配置端口低8位，即Pin0~Pin7
+  if (((uint32_t)GPIO_InitStruct->GPIO_Pin & ((uint32_t)0x00FF)) != 0x00)
+  {
+	// 先备份CRL寄存器的值
+    tmpreg = GPIOx->CRL;
+		
+	// 循环，从Pin0开始配对，找出具体的Pin
+    for (pinpos = 0x00; pinpos < 0x08; pinpos++)
+    {
+	 // pos的值为1左移pinpos位
+      pos = ((uint32_t)0x01) << pinpos;
+      
+	  // 令pos与输入参数GPIO_PIN作位与运算，为下面的判断作准备
+      currentpin = (GPIO_InitStruct->GPIO_Pin) & pos;
+			
+	  //若currentpin=pos,则找到使用的引脚
+      if (currentpin == pos)
+      {
+		// pinpos的值左移两位（乘以4），因为寄存器中4个寄存器位配置一个引脚
+        pos = pinpos << 2;
+       //把控制这个引脚的4个寄存器位清零，其它寄存器位不变
+        pinmask = ((uint32_t)0x0F) << pos;
+        tmpreg &= ~pinmask;
+				
+        // 向寄存器写入将要配置的引脚的模式
+        tmpreg |= (currentmode << pos);  
+				
+		// 判断是否为下拉输入模式
+        if (GPIO_InitStruct->GPIO_Mode == GPIO_Mode_IPD)
+        {
+		  // 下拉输入模式，引脚默认置0，对BRR寄存器写1可对引脚置0
+          GPIOx->BRR = (((uint32_t)0x01) << pinpos);
+        }				
+        else
+        {
+          // 判断是否为上拉输入模式
+          if (GPIO_InitStruct->GPIO_Mode == GPIO_Mode_IPU)
+          {
+		    // 上拉输入模式，引脚默认值为1，对BSRR寄存器写1可对引脚置1
+            GPIOx->BSRR = (((uint32_t)0x01) << pinpos);
+          }
+        }
+      }
+    }
+		// 把前面处理后的暂存值写入到CRL寄存器之中
+    GPIOx->CRL = tmpreg;
+  }
+/*-------------GPIO CRH 寄存器配置 CRH寄存器控制着高8位IO- -----------*/
+  // 配置端口高8位，即Pin8~Pin15
+  if (GPIO_InitStruct->GPIO_Pin > 0x00FF)
+  {
+		// // 先备份CRH寄存器的值
+    tmpreg = GPIOx->CRH;
+		
+	// 循环，从Pin8开始配对，找出具体的Pin
+    for (pinpos = 0x00; pinpos < 0x08; pinpos++)
+    {
+      pos = (((uint32_t)0x01) << (pinpos + 0x08));
+			
+      // pos与输入参数GPIO_PIN作位与运算
+      currentpin = ((GPIO_InitStruct->GPIO_Pin) & pos);
+			
+	 //若currentpin=pos,则找到使用的引脚
+      if (currentpin == pos)
+      {
+		//pinpos的值左移两位（乘以4），因为寄存器中4个寄存器位配置一个引脚
+        pos = pinpos << 2;
+        
+	    //把控制这个引脚的4个寄存器位清零，其它寄存器位不变
+        pinmask = ((uint32_t)0x0F) << pos;
+        tmpreg &= ~pinmask;
+				
+        // 向寄存器写入将要配置的引脚的模式
+        tmpreg |= (currentmode << pos);
+        
+		// 判断是否为下拉输入模式
+        if (GPIO_InitStruct->GPIO_Mode == GPIO_Mode_IPD)
+        {
+		  // 下拉输入模式，引脚默认置0，对BRR寄存器写1可对引脚置0
+          GPIOx->BRR = (((uint32_t)0x01) << (pinpos + 0x08));
+        }
+         // 判断是否为上拉输入模式
+        if (GPIO_InitStruct->GPIO_Mode == GPIO_Mode_IPU)
+        {
+		  // 上拉输入模式，引脚默认值为1，对BSRR寄存器写1可对引脚置1
+          GPIOx->BSRR = (((uint32_t)0x01) << (pinpos + 0x08));
+        }
+      }
+    }
+	// 把前面处理后的暂存值写入到CRH寄存器之中
+    GPIOx->CRH = tmpreg;
+  }
+}
+```
+
+这个函数有GPIOx 和GPIO_InitStruct 两个输入参数，分别是GPIO 外设指针和GPIO初始化结构体指针。分别用来指定要初始化的GPIO 端口及引脚的工作模式。
+
+要深入了解该函数，得配合GPIO引脚工作模式真值表
+
+1）先取得GPIO_Mode 的值，判断bit4 是1 还是0 来判断是输出还是输入。如果是输出则设置输出速率，即加上GPIO_Speed 的值，输入没有速率之说，不用设置。
+2） 配置CRL 寄存器。通过GPIO_Pin 的值计算出具体需要初始化哪个引脚，算出后，然后把需要配置的值写入到CRL 寄存器中，具体分析见代码注释。这里有一个比较有趣的是上/下拉输入并不是直接通过配置某一个寄存器来实现的，而是通过写BSRR 或者BRR 寄存器来实现。这让很多只看手册没看固件库底层源码的人摸不着头脑，因为手册的寄存器说明中没有明确的指出如何配置上拉/下拉，具体见图
+3） 配置CRH 寄存器过程同CRL。
+
+![15](https://github.com/Leon199601/MCU/blob/main/pic/w-15.jpg)
+
+#### 8、使用函数点亮LED灯
+
+```c
+//使用固件库点亮LED
+int main(void)
+{
+	GPIO_InitTypeDef  GPIO_InitStructure;
+	
+	// 开启GPIO端口的时钟
+	RCC_APB2ENR |= (1<<4);
+	
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_Init(GPIOC, &GPIO_InitStructure);
+    GPIO_ResetBits(GPIOC,GPIO_Pin_2);
+
+  while(1)
+  {
+		GPIO_SetBits(GPIOC,GPIO_Pin_2);
+		Delay(0xFFFF);		//延时函数
+		GPIO_ResetBits(GPIOC,GPIO_Pin_2);
+		Delay(0xFFFF);
+	}
+}
+```
+
+使用函数来控制LED 灯与之前直接控制寄存器已经有了很大的区别：main 函数中先定义了一个GPIO 初始化结构体变量GPIO_InitStructure，然后对该变量的各个成员按点亮LED 灯所需要的GPIO 配置模式进行赋值，赋值后，调用GPIO_Init 函数，让它根据结构体成员值对GPIO 寄存器写入控制参数，完成GPIO 引脚初始化。控制电平时，直接使用GPIO_SetBits 和GPIO_Resetbits 函数控制输出。如若对其它引脚进行不同模式的初始化，只要修改GPIO 初始化结构体GPIO_InitStructure 的成员值，把新的参数值输入到GPIO_Init 函数再调用即可。
+
+#### 9、下载验证
+
+#### 10、总结
+
+与直接配置寄存器相比，执行效率上看会耗时间：初始化变量赋值的过程、库函数被调用的时候耗费调用时间，函数内部，对输入参数转换所需要的额外运算也消耗时间（如GPIO运算求出引脚号时），而宏、枚举灯解释操作是作编译过程完成的，不消耗内核的时间。
+
+库函数的优点是可以快速上手STM32控制器，交流方便，查错简单。
+
+## 初识STM32标准库
+
+ST公司提供的标准软件库，包含了STM32芯片所有寄存器的控制操作，方便我们控制STM32芯片。
+
+### CMSIS标准及库层次关系
+
+因为基于Cortex 系列芯片采用的内核都是相同的，区别主要为核外的片上外设的差异，这些差异却导致软件在同内核，不同外设的芯片上移植困难。为了解决不同的芯片厂商生产的Cortex 微控制器软件的兼容性问题，ARM 与芯片厂商建立了CMSIS 标准。
+
+所谓CMSIS 标准，实际是新建了一个软件抽象层。
+
+![16](https://github.com/Leon199601/MCU/blob/main/pic/w-16.jpg)
+
+CMSIS 标准中最主要的为CMSIS 核心层，它包括了：
+ 内核函数层：其中包含用于访问内核寄存器的名称、地址定义，主要由ARM 公司提供。
+ 设备外设访问层：提供了片上的核外外设的地址和中断定义，主要由芯片生产商提供。
+
+可见CMSIS 层位于硬件层与操作系统或用户层之间，提供了与芯片生产商无关的硬件抽象层，可以为接口外设、实时操作系统提供简单的处理器软件接口，屏蔽了硬件差异，这对软件的移植是有极大的好处的。STM32 的库，就是按照CMSIS 标准建立的。
+
+#### 库目录、文件简介
+
+STM32标准库可从官网下载，本书采用3.5.0库文件，目录：STM32F10x_StdPeriph_Lib_V3.5.0\
+
+![17](https://github.com/Leon199601/MCU/blob/main/pic/w-17.jpg)
+
+ Libraries：文件夹下是驱动库的源代码及启动文件，这个非常重要，我们要使用的固件库就在这个文件夹里面。
+ Project ：文件夹下是用驱动库写的例子和工程模板，其中那些为每个外设写好的例程对我们非常有用，我们在学习的时候就可以参考这里面的例程，非常全面，简直就是穷尽了外设的所有功能。
+ Utilities：包含了基于ST 官方实验板的例程，不需要用到，略过即可。
+ stm32f10x_stdperiph_lib_um.chm： 库帮助文档，这个很有用，不喜欢直接看源码的可以在合理查询每个外设的函数说明，非常详细。这是一个已经编译好的HTML 文件，主要讲述如何使用驱动库来编写自己的应用程序。说得形象一点，这个HTML 就是告诉我们：ST 公司已经为你写好了每个外设的驱动了，想知道如何运用这些例子就来向我求救吧。不幸的是，这个帮助文档是英文的，这对很多英文不好的朋友来说是一个很大的障碍。但这里要告诉大家，英文仅仅是一种工具，绝对不能让它成为我们学习的障碍。其实这些英文还是很简单的，我们需要的是拿下它的勇气。
+
+在使用库开发时，我们需要把libraries 目录下的库函数文件添加到工程中，并查阅库帮助文档来了解ST 提供的库函数，这个文档说明了每一个库函数的使用方法。
+
+Libraries文件夹下存放在CMSIS和STM32F10x_StdPeriph_Driver 文件夹
+
+##### 1.CMSIS文件夹
+
+![18](https://github.com/Leon199601/MCU/blob/main/pic/w-18.jpg)
+
+黄色框为需要的内容
+
+内核相关的文件
+
+Core_cm3.h 头文件里面实现了内核的寄存器映射，对应外设头文件stm32f10x.h，区别就是一个针对内核的外设，一个针对片上（内核之外）的外设。core_cm3.c 文件实现了一下操作内核外设寄存器的函数，用的比较少。
+
+core_cm3.h 头文件中包含了“stdint.h” 这个头文件，这是一个ANSI C 文件，是独立于处理器之外的，就像我们熟知的C 语言头文件 “stdio.h” 文件一样。位于RVMDK 这个软件的安装目录下，主要作用是提供一些类型定义。
+
+```c
+/*exact-width signed integer types */
+typedef		signed			char int8_t;
+typedef		signed short 	 int int16_t;
+typedef		signed		 	 int int32_t;
+typedef		signed		 __int64 int64_t;
+
+/*exact-width unsigned integer types */
+typedef		signed			char int8_t;
+typedef		signed short 	 int int16_t;
+typedef		signed		 	 int int32_t;
+typedef		signed		 __int64 int64_t;
+```
+
+这些新类型定义屏蔽了在不同芯片平台时，出现的诸如int 的大小是16 位，还是32 位的差异。所以在我们以后的程序中，都将使用新类型如uint8_t 、uint16_t 等。
+在稍旧版的程序中还经常会出现如u8、u16、u32 这样的类型，分别表示的无符号的8位、16 位、32 位整型。初学者碰到这样的旧类型感觉一头雾水，它们定义的位置在STM32f10x.h 文件中。建议在以后的新程序中尽量使用uint8_t 、uint16_t 类型的定义。
+
+启动文件
+
+启动文件放在startup/arm 这个文件夹下面，这里面启动文件有很多个，不同型号的单片机用的启动文件不一样，有关每个启动文件的详细说明见表
+
+![19](https://github.com/Leon199601/MCU/blob/main/pic/w-19.jpg)
+
+开发板STM32F103VET6 或者STM32F103ZET6 的FLASH 都是512K，属于基本型的大容量产品，启动文件统一选择startup_stm32f10x_hd.s。
+
+stm32f10x.h
+
+这个头文件实现了片上外设的所以寄存器的映射，是一个非常重要的头文件，在内核中与之想对应的头文件是core_cm3.h。
+
+system_stm32f10x.c
+
+该文件实现了STM32的时钟配置，操作的是片上RCC这个外设。系统在上电之后，首选会执行由汇编编写的启动文件，启动文件中的复位函数中调用的SystemInit 函数就在这个文件里面定义。调用完之后，系统的时钟就被初始化成72M。如果后面我们需要重新配置系统时钟，我们就可以参考这个函数重写。为了维持库的完整性，我们不会直接在这个文件里面修改时钟配置函数。
+
+##### 2.STM32F10x_StdPeriph_Driver 文件夹
+
+![20](https://github.com/Leon199601/MCU/blob/main/pic/w-20.jpg)
+
+文件属于CMSIS 之外的、芯片片上外设部分。src 里面是每个设备外设的驱动源程序，inc 则是相对应的外设头文件。src 及inc 文件夹是ST 标准库的主要内容，甚至不少人直接认为ST 标准库就是指这些文件，可见其重要性。
+
+在src 和inc 文件夹里的就是ST 公司针对每个STM32 外设而编写的库函数文件，每个外设对应一个 .c 和 .h 后缀的文件。我们把这类外设文件统称为：stm32f10x_ppp.c 或stm32f10x_ppp.h 文件，PPP 表示外设名称。如在上一章中我们自建的stm32f10x_gpio.c 及stm32f10x_gpio.h 文件，就属于这一类。
+
+如针对模数转换(ADC)外设，在src 文件夹下有一个stm32f10x_adc.c 源文件，在inc 文件夹下有一个stm32f10x_adc.h 头文件，若我们开发的工程中用到了STM32 内部的ADC，则至少要把这两个文件包含到工程里。
+
+这两个文件夹中，还有一个很特别的misc.c 文件，这个文件提供了外设对内核中的NVIC(中断向量控制器)的访问函数，在配置中断时，我们必须把这个文件添加到工程中。
+
+##### 3.stm32f10x_it.c、 stm32f10x_conf.h 和system_stm32f10x.c 文件
+
