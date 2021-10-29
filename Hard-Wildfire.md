@@ -1114,3 +1114,147 @@ system_stm32f10x.c
 
 ##### 3.stm32f10x_it.c、 stm32f10x_conf.h 和system_stm32f10x.c 文件
 
+文件目录：STM32F10x_StdPeriph_Lib_V3.5.0\Project\STM32F10x_StdPeriph_Template
+
+建立完整的工程时，需要添加这四个文件（stm32f10x_it.h）
+
+stm32f10x_it.c：该文件是专门用来编写中断服务函数的，已经定义了一些系统异常（特殊中断）的接口，普通中断服务函数是自己添加。
+
+system_stm32f10x.c：该文件包含了STM32芯片上电后初始化系统时钟、扩展外部存储器用的函数，之前提到供启动文件调用的“SystemInit”函数，上电后初始化时钟，就存储在该文件中，调用该函数后，系统时钟被初始化为72MHz，如需要修改，应该在做系统时钟配置的时候另外重新写时钟配置函数，以保证库的完整性。
+
+stm32f10x_conf.h：该文件被包含进stm32f10x.h文件，用一个头文件stm32f10x_conf.h 把这些外设的头文件都包含在里面。stm32f10x_conf.h中的代码
+
+```c
+#include "stm32f10x_adc.h"
+#include "stm32f10x_bkp.h"
+#include "stm32f10x_can.h"
+#include "stm32f10x_cec.h"
+#include "stm32f10x_crc.h"
+#include "stm32f10x_dac.h"
+#include "stm32f10x_dbgmcu.h"
+#include "stm32f10x_dma.h"
+#include "stm32f10x_exti.h"
+#include "stm32f10x_flash.h"
+#include "stm32f10x_fsmc.h"
+#include "stm32f10x_gpio.h"
+#include "stm32f10x_i2c.h"
+#include "stm32f10x_iwdg.h"
+#include "stm32f10x_pwr.h"
+#include "stm32f10x_rcc.h"
+#include "stm32f10x_rtc.h"
+#include "stm32f10x_sdio.h"
+#include "stm32f10x_spi.h"
+#include "stm32f10x_tim.h"
+#include "stm32f10x_usart.h"
+#include "stm32f10x_wwdg.h"
+#include "misc.h" 
+```
+
+stm32f10x_conf.h该文件还可配置是否使用“断言”编译选项
+
+```c
+#ifdef  USE_FULL_ASSERT
+
+/**
+  * @brief  The assert_param macro is used for function's parameters check.
+  * @param  expr: If expr is false, it calls assert_failed function which reports 
+  *         the name of the source file and the source line number of the call 
+  *         that failed. If expr is true, it returns no value.
+  * @retval None
+  */
+  #define assert_param(expr) ((expr) ? (void)0 : assert_failed((uint8_t *)__FILE__, __LINE__))
+/* Exported functions ------------------------------------------------------- */
+  void assert_failed(uint8_t* file, uint32_t line);
+#else
+  #define assert_param(expr) ((void)0)
+#endif /* USE_FULL_ASSERT */
+```
+
+ST标准库的函数中，一般会包含输入参数检查，即上述代码中的“assert_param”宏，当参数不符合要求时，会调用“assert_failed”函数，这个函数默认是空的。
+
+实际开发中使用断言时，先通过定义USE_FULL_ASSERT 宏来使能断言，然后定义“assert_failed”函数，通常我们会让它调用printf 函数输出错误说明。使能断言后，程序运行时会检查函数的输入参数，当软件经过测试，可发布时，会取消USE_FULL_ASSERT宏来去掉断言功能，使程序全速运行。
+
+#### 库个文件间的关系
+
+从整体上把握各个文件在库工程中的层次或关系
+
+![21](https://github.com/Leon199601/MCU/blob/main/pic/w-21.jpg)
+
+实际的使用库开发工程的过程中，把位于CMSIS 层的文件包含进工程，除了特殊系统时钟需要修改system_stm32f10x.c，其它文件丝毫不用修改，也不建议修改。
+对于位于用户层的几个文件，就是我们在使用库的时候，针对不同的应用对库文件进行增删（用条件编译的方法增删）和改动的文件。
+
+### 使帮助文档
+
+官方的帮助手册是最好的教程，包含了所有开发过程中遇到的问题
+
+##### 常用官方资料
+
+ 《STM32F10X-中文参考手册》
+这个文件全方位介绍了STM32 芯片的各种片上外设，它把STM32 的时钟、存储器架构、及各种外设、寄存器都描述得清清楚楚。当我们对STM32 的外设感到困惑时，可查阅这个文档。以直接配置寄存器方式开发的话，查阅这个文档寄存器部分的频率会相当高，但这样效率太低了。
+ 《STM32 规格书》
+本文档相当于STM32 的datasheet，包含了STM32 芯片所有的引脚功能说明及存储器架构、芯片外设架构说明。后面我们使用STM32 其它外设时，常常需要查找这个手册，了解外设对应到STM32 的哪个GPIO 引脚。
+ 《Cortex™-M3 内核编程手册》
+本文档由ST 公司提供，主要讲解STM32 内核寄存器相关的说明，例如系统定时器、NVIC 等核外设的寄存器。这部分的内容是《STM32F10X-中文参考手册》没涉及到的内核部分的补充。相对来说，本文档虽然介绍了内核寄存器，但不如以下两个文档详细，要了解内核时，可作为以下两个手册的配合资料使用。
+ 《Cortex-M3 权威指南》。
+这个手册是由ARM 公司提供的，它详细讲解了Cortex 内核的架构和特性，要深入了解Cortex-M 内核，这是首选，经典中的经典。这个手册也被翻译成中文，出版成书，我们配套的资料里面有提供中文版的电子版。
+ 《stm32f10x_stdperiph_lib_um.chm》
+这个就是本章提到的库的帮助文档，在使用库函数时，我们最好通过查阅此文件来了解标准库提供了哪些外设、函数原型或库函数的调用的方法。也可以直接阅读源码里面的函数的函数说明。
+
+##### 初识库函数
+
+调用这些库函数，来控制STM32。必须知道调用函数的功能、可传入的参数及其意义、和函数的返回值。
+
+会查库函数就可以，库帮助文档《stm32f10x_stdperiph_lib_um.chm》
+
+标签目录：Modules\STM32F10x_StdPeriph_Driver\GPIO\Functions\GPIO_SetBits
+
+![22](https://github.com/Leon199601/MCU/blob/main/pic/w-22.jpg)
+
+利用这个文档，我们即使没有去看它的具体源代码，也知道要怎么利用它了。
+如GPIO_SetBits，函数的原型为void GPIO_SetBits(GPIO_TypeDef * GPIOx , uint16_tGPIO_Pin)。它的功能是：输入一个类型为GPIO_TypeDef 的指针GPIOx 参数，选定要控制的GPIO 端口；输入GPIO_Pin_x 宏，其中x 指端口的引脚号，指定要控制的引脚。
+其中输入的参数 GPIOx 为ST 标准库中定义的自定义数据类型，这两个传入参数均为结构体指针。初学时，我们并不知道如GPIO_TypeDef 这样的类型是什么意思，可以点击函数原型中带下划线的 GPIO_TypeDef 就可以查看这个类型的声明了。
+就这样初步了解了一下库函数，读者就可以发现STM32 的库是写得很优美的。每个函数和数据类型都符合见名知义的原则，当然，这样的名称写起来特别长，而且对于我们来说要输入这么长的英文，很容易出错，所以在开发软件的时候，在用到库函数的地方，直接把库帮助文档中的函数名称复制粘贴到工程文件就可以了。而且，配合MDK 软件的代码自动补全功能，可以减少输入量。
+有的用户觉得使用库文档麻烦，也可以直接查阅STM32 标准库的源码，库帮助文档的说明都是根据源码生成的，所以直接看源码也可以了解函数功能。
+
+## 新建工程-库函数版
+
+使用库建立一个空的工程，作为工程模板。
+
+### 新建工程
+
+#### 新建本地工程文件夹
+
+在本地电脑新建一个“工程模板”文件夹，在它之下新建6个文件夹
+
+![23](https://github.com/Leon199601/MCU/blob/main/pic/w-23.jpg)
+
+| 名称      | 作用                                                         |
+| --------- | ------------------------------------------------------------ |
+| Doc       | 工程说明.txt                                                 |
+| Libraries | CMSIS:里面放着跟CM2内核有关的库文件                          |
+|           | STM32F10x_StdPeriph_Driver:STM32外设库文件                   |
+| Listing   | 暂时为空                                                     |
+| Outout    | 暂时为空                                                     |
+| Project   | 暂时为空                                                     |
+| User      | stm32f10x_conf.h:用来配置库的头文件                          |
+|           | stm32f10x_it.h、stm32f10x_it.c：中断相关的函数都在这个文件编写，暂时为空 |
+|           | main.c：main函数文件                                         |
+
+#### 新建工程
+
+打开KEIL5，新建一个工程
+
+![24](https://github.com/Leon199601/MCU/blob/main/pic/w-24.jpg)
+
+##### 1.选择CPU型号
+
+MINI选STM32F103RC型号
+
+![25](https://github.com/Leon199601/MCU/blob/main/pic/w-25.jpg)
+
+##### 2.在线添加库文件
+
+后期手动添加库文件
+
+##### 3.添加组文件夹
+
