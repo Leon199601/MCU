@@ -1234,7 +1234,7 @@ ST标准库的函数中，一般会包含输入参数检查，即上述代码中
 | Libraries | CMSIS:里面放着跟CM2内核有关的库文件                          |
 |           | STM32F10x_StdPeriph_Driver:STM32外设库文件                   |
 | Listing   | 暂时为空                                                     |
-| Outout    | 暂时为空                                                     |
+| Output    | 暂时为空                                                     |
 | Project   | 暂时为空                                                     |
 | User      | stm32f10x_conf.h:用来配置库的头文件                          |
 |           | stm32f10x_it.h、stm32f10x_it.c：中断相关的函数都在这个文件编写，暂时为空 |
@@ -1257,4 +1257,52 @@ MINI选STM32F103RC型号
 后期手动添加库文件
 
 ##### 3.添加组文件夹
+
+![26](https://github.com/Leon199601/MCU/blob/main/pic/w-26.jpg)
+
+![27](https://github.com/Leon199601/MCU/blob/main/pic/w-27.jpg)
+
+##### 4.添加文件
+
+![28](https://github.com/Leon199601/MCU/blob/main/pic/w-28.jpg)
+
+##### 5.配置魔术棒选项卡
+
+这一步配置很重要
+
+（1）Target 中选中微库“ Use MicroLib”，为的是在日后编写串口驱动的时候可以使用printf 函数。
+
+（2）在Output 选项卡中把输出文件夹定位到我们工程目录下的“output”文件夹，如果想在编译的过程中生成hex文件，那么那Create HEX File 选项勾上。
+
+（3）在Listing 选项卡中把输出文件夹定位到我们工程目录下的“Listing”文件夹。
+
+（4）在C/C++选项卡中添加处理宏及编译器编译的时候查找的头文件路径。如果头文件路径添加有误，则编译的时候会报错找不到头文件。
+
+![29](https://github.com/Leon199601/MCU/blob/main/pic/w-29.jpg)
+
+在这个选项中添加宏，就相当于我们在文件中使用“#define”语句定义宏一样。在编译器中添加宏的好处就是，只要用了这个模版，就不用源文件中修改代码。
+ STM32F10X_HD 宏：为了告诉STM32 标准库，我们使用的芯片类型是大容量的，使STM32 标准库根据我们选定的芯片型号来配置代码。
+ USE_STDPERIPH_DRIVER 宏：为了让stm32f10x.h 包含stm32f10x_conf.h 这个头文件。
+
+“Include Paths ”这里添加的是头文件的路径，如果编译的时候提示说找不到头文件，一般就是这里配置出了问题。你把头文件放到了哪个文件夹，就把该文件夹添加到这里即可。(请使用图中的方法用文件浏览器去添加路径，不要直接手打路径，容易出错)
+
+##### 6.仿真器配置
+
+Debug---CMSIS-DAP标准
+
+Debug---Settings选项设置
+
+![30](https://github.com/Leon199601/MCU/blob/main/pic/w-30.jpg)
+
+Utilities---Use Debug Driver
+
+##### 7.选择目标板
+
+当你下载的时候，提示说找不到Device，有时候下载程序之后，不会自动运行，要手动复位的时候，都回来看看这里的配置是否有效。
+
+![31](https://github.com/Leon199601/MCU/blob/main/pic/w-31.jpg)
+
+至此，新的使用固件库新建的工程模板就好了。
+
+## GPIO输出---使用固件库点亮LED
 
