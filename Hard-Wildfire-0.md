@@ -1304,5 +1304,5 @@ Utilities---Use Debug Driver
 
 至此，新的使用固件库新建的工程模板就好了。
 
-## GPIO输出---使用固件库点亮LED
+
 
