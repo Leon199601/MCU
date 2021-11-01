@@ -567,6 +567,11 @@
               <FileType>1</FileType>
               <FilePath>..\..\User\Led\bsp_led.c</FilePath>
             </File>
+            <File>
+              <FileName>bsp_led.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\led\bsp_led.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

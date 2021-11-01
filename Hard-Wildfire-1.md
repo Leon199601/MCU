@@ -129,7 +129,7 @@ void LED_GPIO_Config(void)
 (1) 使用GPIO_InitTypeDef 定义GPIO 初始化结构体变量，以便下面用于存储GPIO 配置。
 (2) 调用库函数RCC_APB2PeriphClockCmd 来使能LED 灯的GPIO 端口时钟，在前面的章节中我们是直接向RCC 寄存器赋值来使能时钟的，不如这样直观。该函数有两个输入参数，第一个参数用于指示要配置的时钟，如本例中的“RCC_ APB2Periph_GPIOC”，应用时我们使用“|”操作同时配置2 个LED 灯的时钟；函数的第二个参数用于设置状态，可输入“Disable”关闭或“Enable”使能时钟。
 (3) 向GPIO 初始化结构体赋值，把引脚初始化成推挽输出模式，其中的GPIO_Pin 使用宏“LEDx_GPIO_PIN”来赋值，使函数的实现方便移植。
-(4) 使用以上初始化结构体的配置，调用GPIO_Init 函数向寄存器写入参数，完成GPIO 的初始化，这里的GPIO 端口使用“LEDx_GPIO_PORT”宏来赋值，也是为了程序移植方便。
+(4) 使用以上初始化结构体的配置，==调用GPIO_Init 函数向寄存器写入参数，完成GPIO 的初始化==，这里的GPIO 端口使用“LEDx_GPIO_PORT”宏来赋值，也是为了程序移植方便。
 (5) 使用同样的初始化结构体，只修改控制的引脚和端口，初始化其它LED 灯使用的GPIO 引脚。
 (6) 调用固件库函数控制LED 灯默认关闭。
 
@@ -269,7 +269,11 @@ void assert_failed(uint8_t* file, uint32_t line)
 
 ### 硬件设计
 
-机械按键的触点断开、闭合时，由于触点的弹性作用，按键开关不会马上稳定接通或一下子断开，使用按键时会产生图中的带波纹信号，需要用软件消抖处理滤波，不方便输入检测。本实验板连接的按键带硬件消抖功能，见图，它利用电容充放电的延时，消除了波纹，从而简化软件的处理，软件只需要直接检测引脚的电平即可。
+机械按键的触点断开、闭合时，由于触点的弹性作用，按键开关不会马上稳定接通或一下子断开，使用按键时会产生图中的带波纹信号，进行按键中消抖处理有两种办法，一种是硬件消抖，还有一种是软件消抖。
+
+需要用软件消抖处理滤波，不方便输入检测。
+
+本实验板连接的按键带硬件消抖功能，见图，它利用电容充放电的延时，消除了波纹，从而简化软件的处理，软件只需要直接检测引脚的电平即可。
 
 ![2](https://github.com/Leon199601/MCU/blob/main/pic/w1-2.jpg)
 
@@ -278,4 +282,157 @@ void assert_failed(uint8_t* file, uint32_t line)
 若您使用的实验板按键的连接方式或引脚不一样，只需根据我们的工程修改引脚即可，程序的控制原理相同。
 
 ### 软件设计
+
+方便移植，在“工程模板”上新建“bsp_key.c"及"bsp_key.h"文件
+
+#### 编程要点
+
+1.使能GPIO端口时钟
+
+2.初始化GPIO目标引脚为输入模式（浮空输入）
+
+3.编写简单测试程序，检测按键状态，实现按键控制LED灯
+
+#### 代码分析
+
+##### 1、按键引脚宏定义
+
+编写按键驱动时，考虑更改硬件环境，要把按键检测引脚宏定义写到“bsp_key.h”
+
+```c
+//  引脚定义
+#define    KEY1_GPIO_CLK     RCC_APB2Periph_GPIOA
+#define    KEY1_GPIO_PORT    GPIOA			   
+#define    KEY1_GPIO_PIN		 GPIO_Pin_0
+
+#define    KEY2_GPIO_CLK     RCC_APB2Periph_GPIOC
+#define    KEY2_GPIO_PORT    GPIOC		   
+#define    KEY2_GPIO_PIN		  GPIO_Pin_13
+
+
+ /** 按键按下标置宏
+	*  按键按下为高电平，设置 KEY_ON=1， KEY_OFF=0
+	*  若按键按下为低电平，把宏设置成KEY_ON=0 ，KEY_OFF=1 即可
+	*/
+#define KEY_ON	1
+#define KEY_OFF	0
+```
+
+将检测按键所需要的GPIO端口、引脚号以及端口时钟封装起来。
+
+##### 2、按键GPIO初始化函数
+
+```c
+/**
+  * @brief  配置按键用到的I/O口
+  * @param  无
+  * @retval 无
+  */
+void Key_GPIO_Config(void)
+{
+	GPIO_InitTypeDef GPIO_InitStructure;
+	
+	/*开启按键端口的时钟*/
+	RCC_APB2PeriphClockCmd(KEY1_GPIO_CLK|KEY2_GPIO_CLK,ENABLE);
+	
+	//选择按键的引脚
+	GPIO_InitStructure.GPIO_Pin = KEY1_GPIO_PIN; 
+	// 设置按键的引脚为浮空输入
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING; 
+	//使用结构体初始化按键
+	GPIO_Init(KEY1_GPIO_PORT, &GPIO_InitStructure);
+	
+	//选择按键的引脚
+	GPIO_InitStructure.GPIO_Pin = KEY2_GPIO_PIN; 
+	//设置按键的引脚为浮空输入
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING; 
+	//使用结构体初始化按键
+	GPIO_Init(KEY2_GPIO_PORT, &GPIO_InitStructure);	
+}
+```
+
+(1)使用GPIO_InitTypeDef定义GPIO初始化结构体变量，以便下面用于存储GPIO配置
+
+(2)调用库函数使能GPIO端口时钟
+
+(3)向GPIO初始化结构体赋值，引脚设为浮空输入模式。由于引脚的默认电平受按键电路影响，所以设置为浮空输入。
+
+(4)使用上面初始化结构体的配置，==调用GPIO_Init函数向寄存器写入参数，完成GPIO初始化。==
+
+(5)使用同样的初始化结构体，只修改控制的引脚和端口，初始化其它按键检测时使用的GPIO 引脚。
+
+##### 3、检测按键的状态
+
+检测对应引脚的电平来判断按键状态
+
+```
+/*
+ * 函数名：Key_Scan
+ * 描述  ：检测是否有按键按下
+ * 输入  ：GPIOx：x 可以是 A，B，C，D或者 E
+ *		     GPIO_Pin：待读取的端口位 	
+ * 输出  ：KEY_OFF(没按下按键)、KEY_ON（按下按键）
+ */
+uint8_t Key_Scan(GPIO_TypeDef* GPIOx,uint16_t GPIO_Pin)
+{			
+	/*检测是否有按键按下 */
+	if(GPIO_ReadInputDataBit(GPIOx,GPIO_Pin) == KEY_ON )  
+	{	 
+		/*等待按键释放 */
+		while(GPIO_ReadInputDataBit(GPIOx,GPIO_Pin) == KEY_ON);   
+		return 	KEY_ON;	 
+	}
+	else
+		return KEY_OFF;
+}
+```
+
+在这里定义了一个Key_Scan 函数用于扫描按键状态。GPIO 引脚的输入电平可通过读取IDR 寄存器对应的数据位来感知， 而STM32 标准库提供了库函数GPIO_ReadInputDataBit 来获取位状态，该函数输入GPIO 端口及引脚号，函数返回该引脚的电平状态，高电平返回1，低电平返回0。Key_Scan 函数中以GPIO_ReadInputDataBit 的返回值与自定义的宏“KEY_ON”对比，若检测到按键按下，则使用while 循环持续检测按键状态，直到按键释放，按键释放后Key_Scan 函数返回一个“KEY_ON”值；若没有检测到按键按下，则函数直接返回“KEY_OFF”。
+
+若按键的硬件没有做消抖处理，需要在这个Key_Scan 函数中做软件滤波，防止波纹抖动引起误触发。
+
+##### 4、主函数
+
+```c
+/**
+  * @brief  主函数
+  * @param  无
+  * @retval 无
+  */ 
+int main(void)
+{	
+	/* LED端口初始化 */
+	LED_GPIO_Config();
+	LED1_ON;
+
+	/* 按键端口初始化 */
+	Key_GPIO_Config();
+	
+	/* 轮询按键状态，若按键按下则反转LED */
+	while(1)                            
+	{	   
+		if( Key_Scan(KEY1_GPIO_PORT,KEY1_GPIO_PIN) == KEY_ON  )
+		{
+			/*LED1反转*/
+			LED1_TOGGLE;
+		} 
+
+		if( Key_Scan(KEY2_GPIO_PORT,KEY2_GPIO_PIN) == KEY_ON  )
+		{
+			/*LED2反转*/
+			LED2_TOGGLE;
+		}		
+	}
+}
+```
+
+代码中初始化LED 灯及按键后，在while 函数里不断调用Key_Scan 函数，并判断其返回值，若返回值表示按键按下，则反转LED 灯的状态。
+
+#### 下载验证
+
+## GPIO---位带操作
+
+本章参考资料：《STM32F10X-中文参考手册》存储器和总线构架章节、GPIO 章节，《CM3 权威指南CnR2》存储器系统章节。学习本章时，配套这些参考资料学习效果会更佳。
+
+### 位带简介
 
