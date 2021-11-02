@@ -436,3 +436,393 @@ int main(void)
 
 ### 位带简介
 
+位操作是单独对一个比特位读和写，stm32是通过访问位带别名区来实现的
+
+stm32中，有两个地方实现位带，SRAM区的最低1MB空间，另一个是外设区最低1MB空间。这两个1MB 的空间除了可以像正常的RAM 一样操作外，他们还有自己的位带别名区，位带别名区把这1MB 的空间的每一个位膨胀成一个32 位的字，当访问位带别名区的这些字时，就可以达到访问位带区某个比特位的目的。
+
+![3](https://github.com/Leon199601/MCU/blob/main/pic/w1-3.jpg)
+
+#### 外设位带区
+
+外设外带区的地址为：0X40000000~0X40100000，这个大小为1MB，这1MB 的大小在103 系列大/中/小容量型号的单片机中包含了片上外设的全部寄存器，这些寄存器的地址为： 0X40000000~0X40029FFF 。外设位带区经过膨胀后的位带别名区地址为：
+0X42000000~0X43FFFFFF，这个地址仍然在CM3 片上外设的地址空间中。在103 系列大/中小容量型号的单片机里面，0X40030000~0X4FFFFFFF 属于保留地址，膨胀后的32MB位带别名区刚好就落到这个地址范围内，不会跟片上外设的其他寄存器地址重合。STM32 的全部寄存器都可以通过访问位带别名区的方式来达到访问原始寄存器比特位的效果，这比51 单片机强大很多。因为51 单片机里面并不是所有的寄存器都是可以比特位操作，有些寄存器还是得字节操作，比如SBUF。虽然说全部寄存器都可以实现比特操作，但我们在实际项目中并不会这么做，甚至不会这么做。有时候为了特定的项目需要，比如需要频繁的操作很多IO 口，这个时候我们可以考虑把IO 相关的寄存器实现比特操作。
+
+#### SRAM位带区
+
+SRAM的位带区的地址为：0X2000 0000~X2010 0000，大小为1MB，经过膨胀后的位带别名区地址为：0X2200 0000~0X23FF FFFF，大小为32MB。操作SRAM 的比特位这个用得很少。
+
+#### 位带区和位带别名区地址转换
+
+位带区的一个比特位经过膨胀之后，虽然变大到4 个字节，但是还是LSB（最低位） 才有效。有人会问这不是浪费空间吗，要知道STM32 的系统总线是32 位的，按照4 个字节访问的时候是最快的，所以膨胀成4 个字节来访问是最高效的。
+通过指针的形式访问位带别名区地址从而达到操作位带区比特位的效果。那这两个地址直接如何转换，简单介绍一下。
+
+##### 外设位带别名区地址
+
+对于片上外设位带区的某个比特，记它所在字节的地址为 A,位序号为 n(0<=n<=7)，则该比特在别名区的地址为：
+
+```c
+AliasAddr= =0x40000000+ （A-0x40000000）*8*4 +n*4
+```
+
+0X42000000 是外设位带别名区的起始地址，0x40000000是外设位带区的起始地址，（A-0x40000000）表示该比特前面有多少个字节，一个字节有8位，所以*8，一个位膨胀后是4个字节，所以*4，n表示该比特在A地址的序号，因为一个位经过膨胀后是四个字节，所以也*4。
+
+##### SRAM位带别名区地址
+
+对于SRAM 位带区的某个比特，记它所在字节的地址为 A,位序号为 n(0<=n<=7)，则该比特在别名区的地址为：
+
+```c
+AliasAddr= =0x22000000+ （A-0x20000000）*8*4 +n*4
+```
+
+##### 统一公式
+
+为了方便，统一成一个宏
+
+```c
+// 把“位带地址+位序号”转换成别名地址的宏
+#define BITBAND(addr, bitnum) ((addr & 0xF0000000)+0x02000000+((addr &
+0x00FFFFFF)<<5)+(bitnum<<2))
+```
+
+addr & 0xF0000000 是为了区别SRAM还是外设，实际效果就是取出4 或者2，如果是外设，则取出的是4，+0X02000000 之后就等于0X42000000，0X42000000 是外设别名区的起始地址。如果是SRAM，则取出的是2，+0X02000000 之后就等于0X22000000，0X22000000 是SRAM别名区的起始地址。
+
+addr & 0x00FFFFFF 屏蔽了高三位，相当于减去0X20000000 或者0X40000000，但是为什么是屏蔽高三位？因为外设的最高地址是：0X2010 0000，跟起始地址0X20000000 相减的时候，总是低5 位才有效，所以干脆就把高三位屏蔽掉来达到减去起始地址的效果，具体屏蔽掉多少位跟最高地址有关。SRAM 同理分析即可。<<5 相当于*8*4，<<2 相当于*4，这两个我们在上面分析过。
+
+最后就可以通过指针的形式操作这些位带别名区地址，最终实现位带区的比特位操作。
+
+```c
+// 把一个地址转换成一个指针
+#define MEM_ADDR(addr) *((volatile unsigned long *)(addr))
+
+// 把位带别名区地址转换成指针
+#define BIT_ADDR(addr, bitnum) MEM_ADDR(BITBAND(addr, bitnum))
+```
+
+### GPIO位带操作
+
+外设的位带区，覆盖了全部的片上外设的寄存器，我们可以通过宏为每个寄存器的位都定义一个位带别名地址，从而实现位操作。但这个在实际项目中不是很现实，也很少人会这么做，我们在这里仅仅演示下GPIO 中ODR 和IDR 这两个寄存器的位操作。
+
+从手册中我们可以知道ODR 和IDR 这两个寄存器对应GPIO 基址的偏移是12 和8，先实现这两个寄存器的地址映射，其中GPIOx_BASE在库函数里面有定义。
+
+#### GPIO寄存器映射
+
+```c
+// GPIO ODR 和 IDR 寄存器地址映射 
+#define GPIOA_ODR_Addr    (GPIOA_BASE+12) //0x4001080C   
+#define GPIOB_ODR_Addr    (GPIOB_BASE+12) //0x40010C0C   
+#define GPIOC_ODR_Addr    (GPIOC_BASE+12) //0x4001100C   
+#define GPIOD_ODR_Addr    (GPIOD_BASE+12) //0x4001140C   
+#define GPIOE_ODR_Addr    (GPIOE_BASE+12) //0x4001180C   
+#define GPIOF_ODR_Addr    (GPIOF_BASE+12) //0x40011A0C      
+#define GPIOG_ODR_Addr    (GPIOG_BASE+12) //0x40011E0C      
+  
+#define GPIOA_IDR_Addr    (GPIOA_BASE+8)  //0x40010808   
+#define GPIOB_IDR_Addr    (GPIOB_BASE+8)  //0x40010C08   
+#define GPIOC_IDR_Addr    (GPIOC_BASE+8)  //0x40011008   
+#define GPIOD_IDR_Addr    (GPIOD_BASE+8)  //0x40011408   
+#define GPIOE_IDR_Addr    (GPIOE_BASE+8)  //0x40011808   
+#define GPIOF_IDR_Addr    (GPIOF_BASE+8)  //0x40011A08   
+#define GPIOG_IDR_Addr    (GPIOG_BASE+8)  //0x40011E08 
+```
+
+现在就可以用位操作的方法来控制GPIO 的输入和输出了，其中宏参数n 表示具体是哪一个IO 口，n(0,1,2...16)。这里面包含了端口A~G，并不是每个单片机型号都有这么多端口，使用这部分代码时，要查看你的单片机型号，如果是64pin 的则最多只能使用到C 端口。
+
+#### GPIO位操作
+
+```c
+// 单独操作 GPIO的某一个IO口，n(0,1,2...16),n表示具体是哪一个IO口
+#define PAout(n)   BIT_ADDR(GPIOA_ODR_Addr,n)  //输出   
+#define PAin(n)    BIT_ADDR(GPIOA_IDR_Addr,n)  //输入   
+  
+#define PBout(n)   BIT_ADDR(GPIOB_ODR_Addr,n)  //输出   
+#define PBin(n)    BIT_ADDR(GPIOB_IDR_Addr,n)  //输入   
+  
+#define PCout(n)   BIT_ADDR(GPIOC_ODR_Addr,n)  //输出   
+#define PCin(n)    BIT_ADDR(GPIOC_IDR_Addr,n)  //输入   
+  
+#define PDout(n)   BIT_ADDR(GPIOD_ODR_Addr,n)  //输出   
+#define PDin(n)    BIT_ADDR(GPIOD_IDR_Addr,n)  //输入   
+  
+#define PEout(n)   BIT_ADDR(GPIOE_ODR_Addr,n)  //输出   
+#define PEin(n)    BIT_ADDR(GPIOE_IDR_Addr,n)  //输入  
+  
+#define PFout(n)   BIT_ADDR(GPIOF_ODR_Addr,n)  //输出   
+#define PFin(n)    BIT_ADDR(GPIOF_IDR_Addr,n)  //输入  
+  
+#define PGout(n)   BIT_ADDR(GPIOG_ODR_Addr,n)  //输出   
+#define PGin(n)    BIT_ADDR(GPIOG_IDR_Addr,n)  //输入 
+```
+
+#### 主函数
+
+```c
+int main(void)
+{	
+	// 程序来到main函数之前，启动文件：statup_stm32f10x_hd.s已经调用
+	// SystemInit()函数把系统时钟初始化成72MHZ
+	// SystemInit()在system_stm32f10x.c中定义
+	// 如果用户想修改系统时钟，可自行编写程序修改
+	
+	LED_GPIO_Config();
+	
+	while( 1 )
+	{
+		// PC2 = 0,PC3 = 0,点亮LED
+		PCout(2)= 0;	
+		PCout(3)= 0;			
+		SOFT_Delay(0x0FFFFF);
+		
+		// PC2 = 1,PC3 = 1,熄灭LED		
+		PCout(2)= 1;
+		PCout(3)= 1;
+		SOFT_Delay(0x0FFFFF);		
+	}
+}
+```
+
+#### 下载验证
+
+## 启动文件详解
+
+本章参考资料《STM32F10X-中文参考手册》第九章-中断和事件：表55其他STM32F10xxx 产品（小容量、中容量和大容量）的向量表；MDK 中的帮助手册—ARM Development Tools：用来查询ARM的汇编指令和编译器相关的指令。
+
+### 启动文件简介
+
+启动文件由汇编编写，，是系统上电复位后第一个执行的程序。主要做了以下工作：
+1、初始化堆栈指针 SP = _initial_sp
+2、初始化PC 指针 = Reset_Handler
+3、初始化中断向量表
+4、配置系统时钟
+5、调用C 库函数 _main 初始化用户堆栈，从而最终调用main 函数去到C 的世界
+
+### 查看ARM汇编指令
+
+在讲解启动代码的时候，会涉及到ARM 的汇编指令和Cortex 内核的指令，有关Cortex 内核的指令我们可以参考《CM3 权威指南CnR2》第四章：指令集。剩下的ARM的汇编指令我们可以在MDK->Help->Uvision Help 中搜索到，以EQU 为例，检索如下：
+
+![4](https://github.com/Leon199601/MCU/blob/main/pic/w1-4.jpg)
+
+检索出来的结果会有很多，只需要看Assembler User Guide 这部分即可。列出了启动文件中使用到的ARM 汇编指令，该列表的指令全部从ARM Development Tools这个帮助文档里面检索而来。
+
+其中编译器相关的指令WEAK 和ALIGN 为了方便也放在同一个表格了。
+
+| 指令名称       | 作用                                                         |
+| -------------- | ------------------------------------------------------------ |
+| EQU            | 给数字常量取一个符号名，相当于C 语言中的define               |
+| AREA           | 汇编一个新的代码段或者数据段                                 |
+| SPACE          | 分配内存空间                                                 |
+| PRESERVE8      | 当前文件堆栈需按照8 字节对齐                                 |
+| EXPORT         | 声明一个标号具有全局属性，可被外部的文件使用                 |
+| DCD            | 以字为单位分配内存，要求4 字节对齐，并要求初始化这些内存     |
+| PROC           | 定义子程序，与ENDP 成对使用，表示子程序结束                  |
+| WEAK           | 弱定义，如果外部文件声明了一个标号，则优先使用外部文件定义的标号，如果外部文件没有定义也不出错。要注意的是：这个不是ARM的指令，是编译器的，这里放在一起只是为了方便。 |
+| IMPORT         | 声明标号来自外部文件，跟C 语言中的EXTERN 关键字类似          |
+| B              | 跳转到一个标号                                               |
+| ALIGN          | 编译器对指令或者数据的存放地址进行对齐，一般需要跟一个立即数，缺省表示4字节对齐。要注意的是：这个不是ARM的指令，是编译器的，这里放在一起只是为了方便。 |
+| END            | 到达文件的末尾，文件结束                                     |
+| IF,EL,SE,ENDIF | 汇编条件分支语句，跟C语言的if else类似                       |
+
+### 启动文件代码讲解
+
+#### Stack---栈
+
+```assembly
+Stack_Size		EQU		0x00000400
+
+				AREA	STACK,	NOINIT,	READWRITE,	ALIGN=3
+Stack_Mem		SPACE	Stack_Size
+__initial_sp
+```
+
+开辟栈的大小为0X00000400（1KB），名字为STACK，NOINIT 即不初始化，可读可写，8（2^3）字节对齐。
+栈的作用是用于局部变量，函数调用，函数形参等的开销，栈的大小不能超过内部SRAM的大小。如果编写的程序比较大，定义的局部变量很多，那么就需要修改栈的大小。如果某一天，你写的程序出现了莫名奇怪的错误，并进入了硬fault的时候，这时你就要考虑下是不是栈不够大，溢出了。
+
+EQU：宏定义的伪指令，相当于等于，类似与C 中的define。
+AREA：告诉汇编器汇编一个新的代码段或者数据段。STACK 表示段名，这个可以任意命名；NOINIT 表示不初始化；READWRITE 表示可读可写，ALIGN=3，表示按照2^3对齐，即8 字节对齐。
+SPACE：用于分配一定大小的内存空间，单位为字节。这里指定大小等于Stack_Size。标号__initial_sp 紧挨着SPACE 语句放置，表示栈的结束地址，即栈顶地址，栈是由高向低生长的。
+
+#### Heap堆
+
+```assembly
+Heap_Size		EQU		0x00000200
+
+				AREA	HRAP,NOINIT,READWRITE,ALIGN=3
+__heap_base
+Heap_Mem		SPACE	Heap_Size
+__heap_limit
+```
+
+开辟堆的大小为0X00000200（512 字节），名字为HEAP，NOINIT 即不初始化，可读可写，8（2^3）字节对齐。__ heap_base 表示对的起始地址，__heap_limit 表示堆的结束地址。堆是由低向高生长的，跟栈的生长方向相反。
+堆主要用来动态内存的分配，像malloc()函数申请的内存就在堆上面。这个在STM32里面用的比较少。
+
+```assembly
+PRESERVE8
+THUMB
+```
+
+PRESERVE8：指定当前文件的堆栈按照8 字节对齐。
+THUMB：表示后面指令兼容THUMB 指令。THUBM是ARM以前的指令集，16bit，现在Cortex-M系列的都使用THUMB-2 指令集，THUMB-2 是32 位的，兼容16 位和32 位的指令，是THUMB 的超集。
+
+#### 向量表
+
+```assembly
+AREA		RESET,DATA,READONLY
+EXPORT	__Vectors
+EXPORT	__Vectors_End
+EXPORT	__Vectors_Size
+```
+
+定义一个数据段，名字为RESET，可读。并声明 __ Vectors、__ Vectors_End 和__ Vectors_Size 这三个标号具有全局属性，可供外部的文件调用。
+EXPORT：声明一个标号可被外部的文件使用，使标号具有全局属性。如果是IAR 编译器，则使用的是GLOBAL 这个指令。
+当内核响应了一个发生的异常后，对应的异常服务例程(ESR)就会执行。为了决定 ESR的入口地址， 内核使用了―向量表查表机制‖。这里使用一张向量表。向量表其实是一个WORD（ 32 位整数）数组，每个下标对应一种异常，该下标元素的值则是该 ESR 的入口地址。向量表在地址空间中的位置是可以设置的，通过 NVIC 中的一个重定位寄存器来指出向量表的地址。在复位后，该寄存器的值为 0。因此，在地址 0 （即FLASH 地址0）处必须包含一张向量表，用于初始时的异常分配。要注意的是这里有个另类： 0 号类型并不是什么入口地址，而是给出了复位后 MSP 的初值。
+
+![5](https://github.com/Leon199601/MCU/blob/main/pic/w1-5.jpg)
+
+```assembly
+__Vectors       DCD     __initial_sp               ; Top of Stack ---栈顶地址
+                DCD     Reset_Handler              ; Reset Handler---复位程序地址
+                DCD     NMI_Handler                ; NMI Handler
+                DCD     HardFault_Handler          ; Hard Fault Handler
+                DCD     MemManage_Handler          ; MPU Fault Handler
+                DCD     BusFault_Handler           ; Bus Fault Handler
+                DCD     UsageFault_Handler         ; Usage Fault Handler
+                DCD     0                          ; Reserved		0 表示保留
+                DCD     0                          ; Reserved
+                DCD     0                          ; Reserved
+                DCD     0                          ; Reserved
+                DCD     SVC_Handler                ; SVCall Handler
+                DCD     DebugMon_Handler           ; Debug Monitor Handler
+                DCD     0                          ; Reserved
+                DCD     PendSV_Handler             ; PendSV Handler
+                DCD     SysTick_Handler            ; SysTick Handler
+
+;外部中断开始
+				DCD     WWDG_IRQHandler            ; Window Watchdog
+                DCD     PVD_IRQHandler             ; PVD through EXTI Line detect
+                DCD     TAMPER_IRQHandler          ; Tamper
+                
+;限于篇幅，中间代码省略
+DCD     DMA2_Channel2_IRQHandler   ; DMA2 Channel2
+                DCD     DMA2_Channel3_IRQHandler   ; DMA2 Channel3
+                DCD     DMA2_Channel4_5_IRQHandler ; DMA2 Channel4 & Channel5
+__Vectors_End
+
+__Vectors_Size  EQU  __Vectors_End - __Vectors
+```
+
+__ Vectors 为向量表起始地址，__Vectors_End为向量表结束地址，两个相减即可算出向量表大小。
+向量表从FLASH 的0 地址开始放置，以4 个字节为一个单位，地址0 存放的是栈顶地址，0X04 存放的是复位程序的地址，以此类推。从代码上看，向量表中存放的都是中断服务函数的函数名，可我们知道C 语言中的函数名就是一个地址。
+DCD：分配一个或者多个以字为单位的内存，以四字节对齐，并要求初始化这些内存。在向量表中，DCD 分配了一堆内存，并且以ESR 的入口地址初始化它们。
+
+#### 复位程序
+
+```assembly
+AREA	|.text|,	CODE,	READONLY
+```
+
+定义一个名称为.text的代码段，可读。
+
+```assembly
+Reset_Handler PROC
+			  EXPORT	Reset_Handle	[WEAK]
+			  IMPORT	SystemInit
+			  IMPORT	__mian
+			  
+			  LDR	R0,=SystemInit
+			  BLX	R0
+			  LDR	R0，=__MAIN
+			  BX	R0
+			  ENDP
+```
+
+复位子程序是系统上电后第一个执行的程序，调用SystemInit函数初始化系统时钟，然后调用C库函数_main,最终调用main函数去到C的世界。
+
+WEAK：表示弱定义，如果外部文件优先定义了该标号则首先引用该标号，如果外部文件没有声明也不会出错。这里表示复位子程序可以由用户在其他文件重新实现，这里并不是唯一的。
+IMPORT：表示该标号来自外部文件，跟C 语言中的EXTERN 关键字类似。这里表示SystemInit __ main 这两个函数均来自外部的文件。
+SystemInit()是一个标准的库函数，在system_stm32f10x.c 这个库文件总定义。主要作用是配置系统时钟，这里调用这个函数之后，单片机的系统时钟配被配置为72M。
+__main 是一个标准的C 库函数，主要作用是初始化用户堆栈，并在函数的最后调用main 函数去到C 的世界。这就是为什么我们写的程序都有一个main 函数的原因。
+
+LDR、BLX、BX是CM4内核的指令，可在《CM3权威指南CnR2》第四章-指令集里面查询到，具体作用见表：
+
+| 指令名称 | 作用                                                         |
+| -------- | ------------------------------------------------------------ |
+| LDR      | 从存储器中加载字到一个寄存器中                               |
+| BL       | 跳转到由寄存器/标号给出的地址，并把跳转前的下条指令地址保存到LR |
+| BLX      | 跳转到由寄存器给出的地址，并根据寄存器的LSE 确定处理器的状态，还要<br/>把跳转前的下条指令地址保存到LR |
+| BX       | 跳转到由寄存器/标号给出的地址，不用返回                      |
+
+#### 中断服务程序
+
+在启动文件里面已经写好了所有中断的中断服务函数，跟平时写的中断服务函数不一样的就是这些函数是空的，真正的中断服务程序需要在外部的C文件里面重新实现，这里只是提前占了一个位置而已。
+
+如果使用某个外设的时候，开启了某个中断，但是又忘记编写配套的中断服务程序或者函数名写错，那当中断来临的时，程序会跳转到启动文件预先写好的空的中断服务函数中，并且在这个空函数中无限循环，即程序就是死在这了。
+
+```assembly
+NMT_Handler		PROC	;系统异常
+				EXPORT	NMI_Handler				[WEAK]
+				B		.
+				ENDP
+				
+;限于篇幅，中间代码省略
+SysTick_Handler PROC
+				EXPORT	SysTick_Handler			[WEAK]
+				B		.
+				ENDP
+				
+Default_Handler PROC	;外部中断
+				EXPORT	WWDG_IRQHandler			[WEAK]
+				EXPORT	PVD_IRQHandler			[WEAK]
+				EXPORT	TAMP_STAMP_IRQHandler	[WEAK]
+				
+;限于篇幅，中间代码省略
+LTDC_IRQHandler
+LTDC_ER_IRQHandler
+DMA2D_IRQHandler
+				B		.
+				ENDP
+```
+
+B:跳转到一个标号。这里跳转到一个’.‘，即表示无限循环。
+
+#### 用户堆栈初始化
+
+ALIGN:对指令或者数据存放的地址进行对齐，后面会跟一个立即数。缺省表示4字节对齐。
+
+```assembly
+; User Stack and Heap initialization
+;用户栈和堆初始化，由C库函数_main来完成
+                 IF      :DEF:__MICROLIB	;这个宏在KEIL里面启动
+                
+                 EXPORT  __initial_sp
+                 EXPORT  __heap_base
+                 EXPORT  __heap_limit
+                
+                 ELSE
+                
+                 IMPORT  __use_two_region_memory	;这个函数由用户自己实现
+                 EXPORT  __user_initial_stackheap
+                 
+__user_initial_stackheap
+
+                 LDR     R0, =  Heap_Mem
+                 LDR     R1, =(Stack_Mem + Stack_Size)
+                 LDR     R2, = (Heap_Mem +  Heap_Size)
+                 LDR     R3, = Stack_Mem
+                 BX      LR
+
+                 ALIGN
+
+                 ENDIF
+
+                 END
+```
+
+首先判断是否定义了 _ _  MICROLIB，如果定义了这个宏则赋予标号   _ _ initial_sp（栈顶地址）、_ _ heap_base（堆起始地址）、_ _ heap_limit（堆结束地址）全局属性，可供外部文件调用。有关这个宏我们在KEIL 里面配置，具体见下图。然后堆栈的初始化就由C 库
+函数_main 来完成。
+
+![6](https://github.com/Leon199601/MCU/blob/main/pic/w1-6.jpg)
+
+如果没有定义__ MICROLIB ， 则才用双段存储器模式， 且声明标号__user_initial_stackheap 具有全局属性，让用户自己来初始化堆栈。
+IF,ELSE,ENDIF：汇编的条件分支语句，跟C 语言的if ,else 类似
+END：文件结束
+
+## RCC---使用HSE/HSI配置时钟
